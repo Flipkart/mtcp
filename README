@@ -33,11 +33,12 @@ mtcp/src/include - mTCP’s internal header files
 mtcp/lib - library file
 mtcp/include - header files that applications will use
 
-io_engine - event-driven packet I/O engine (io_engine)
-io_engine/driver - driver source code
-io_engine/lib - io_engine library
-io_engine/include - io_engine header files
-io_engine/samples - sample io_engine applications (not mTCP’s)
+io_engine - event-driven packet I/O engines
+io_engine/packet_shader - packet shader based I/O engine
+io_engine/packet_shader/driver - driver source code
+io_engine/packet_shader/packlib - io_engine library
+io_engine/packet_shader/include - io_engine header files
+io_engine/packet_shader/samples - sample io_engine applications (not mTCP’s)
 
 apps - mTCP applications
 apps/example - example applications (see README)
@@ -52,7 +53,7 @@ config - sample mTCP configuration files (may not be necessary)
  INSTALL GUIDES
 ========================================================================
 
-1. make in io_engine/driver
+1. make in io_engine/packet_shader/driver
   - check ps_ixgbe.ko
 
 2. install the driver
@@ -60,7 +61,7 @@ config - sample mTCP configuration files (may not be necessary)
   - refer to http://shader.kaist.edu/packetshader/io_engine/
   - you may need to change the ip address in install.py:46
 
-3. make in io_engine/lib
+3. make in io_engine/packet_shader/lib
   - check libps.a
 
 4. make in mtcp/src
