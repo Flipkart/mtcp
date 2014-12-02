@@ -4,6 +4,9 @@
 #define MAX_DEVICES	16
 #define MAX_RINGS	64
 
+#define E_PSIO		TRUE
+#define USE_CHUNK_BUF	FALSE
+
 /* IN: option for ps_wait(); */
 #define PS_CTL_IN 0x1		/* The associated queue is available to read */
 #define PS_CTL_OUT 0x2 	/* The associated queue is available to write */
