@@ -28,7 +28,7 @@ LIBS = -lnuma -lpthread -lrt
 LIBS += -lps
 
 # PacketShader LIBRARY and HEADER
-PS_DIR=../../io_engine
+PS_DIR=../../io_engine/packet_shader
 LIB_DIR = -L$(PS_DIR)/lib
 INC += -I$(PS_DIR)/include
 
