@@ -61,6 +61,7 @@ $(DEPS): .%.d: %.c Makefile
 -include $(DEPS)
 
 $(MTCP_HDR):
+	mkdir -p $(MTCP_HDR_DIR)
 	cp $(INC_DIR)/$@ $(MTCP_HDR_DIR)/$@
 
 clean: clean-library
@@ -68,5 +69,5 @@ clean: clean-library
 	rm -f .*.d
 
 clean-library:
-	rm -f $(MTCP_LIB_DIR)/*
-	rm -f $(MTCP_HDR_DIR)/*
+	rm -rf $(MTCP_LIB_DIR)
+	rm -rf $(MTCP_HDR_DIR)
