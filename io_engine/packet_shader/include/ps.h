@@ -230,7 +230,7 @@ static inline void memcpy_aligned(void *to, const void *from, size_t len)
 struct ps_handle {
 	int fd;
 
-	struct ps_queue rx_queues[MAX_DEVICES];
+	struct ps_queue queues[MAX_DEVICES];
 
 	uint64_t rx_chunks[MAX_DEVICES];
 	uint64_t rx_packets[MAX_DEVICES];

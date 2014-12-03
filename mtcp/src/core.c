@@ -120,7 +120,7 @@ AttachDevice(struct mtcp_thread_context* ctx)
 	// attaching (device, queue)
 	for (i = 0 ; i < num_devices_attached ; i++) {
 		device = &devices[devices_attached[i]];
-		queue = &handle->rx_queues[i];
+		queue = &handle->queues[i];
 
 		queue->ifindex = devices_attached[i];
 		queue->qidx = ps_alloc_qidx(device, ctx->cpu);
@@ -151,7 +151,7 @@ DetachDevice(struct mtcp_thread_context* ctx)
 	struct ps_handle *handle = ctx->handle;
 
 	for (i = 0 ; i < num_devices_attached ; i++) {
-		queue = &handle->rx_queues[i];
+		queue = &handle->queues[i];
 
 		if (queue->qidx < 0)
 			continue;

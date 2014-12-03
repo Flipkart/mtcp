@@ -34,11 +34,18 @@ int ps_list_devices(struct ps_device *devices)
 
 int ps_init_handle(struct ps_handle *handle)
 {
+	int i;
+
 	memset(handle, 0, sizeof(struct ps_handle));
 
 	handle->fd = open("/dev/packet_shader", O_RDWR);
 	if (handle->fd == -1)
 		return -1;
+
+	for (i = 0; i < MAX_DEVICES; i++) {
+		handle->queues[i].ifindex = -1;
+		handle->queues[i].qidx = -1;
+	}
 
 	return 0;
 }
