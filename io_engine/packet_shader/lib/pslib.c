@@ -49,6 +49,19 @@ void ps_close_handle(struct ps_handle *handle)
 	handle->fd = -1;
 }
 
+int ps_alloc_qidx(struct ps_device *device, int cpu)
+{
+	if (device->num_rx_queues <= cpu)
+		return -1;
+
+	return cpu;
+}
+
+void ps_free_qidx(struct ps_device *device, int cpu, int qidx)
+{
+	/* FIXME: For now nothing to do here. */
+}
+
 int ps_attach_rx_device(struct ps_handle *handle, struct ps_queue *queue)
 {
 	return ioctl(handle->fd, PS_IOC_ATTACH_RX_DEVICE, queue);

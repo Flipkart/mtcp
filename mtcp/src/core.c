@@ -110,35 +110,61 @@ HandleSignal(int signal)
 static int 
 AttachDevice(struct mtcp_thread_context* ctx)
 {
-	struct ps_handle *handle = ctx->handle;
 	int ret;
 	int working = -1;
 	int i;
+	struct ps_device *device;
+	struct ps_queue *queue;
+	struct ps_handle *handle = ctx->handle;
 
 	// attaching (device, queue)
 	for (i = 0 ; i < num_devices_attached ; i++) {
-		struct ps_queue queue;
-		queue.ifindex = devices_attached[i];
+		device = &devices[devices_attached[i]];
+		queue = &handle->rx_queues[i];
 
-		if (devices[devices_attached[i]].num_rx_queues <= ctx->cpu)
+		queue->ifindex = devices_attached[i];
+		queue->qidx = ps_alloc_qidx(device, ctx->cpu);
+		if (queue->qidx < 0)
 			continue;
 
 		working = 0;
-		queue.ifindex = devices_attached[i];
-		queue.qidx = ctx->cpu;
-
 #if 0
 		TRACE_DBG("attaching RX queue xge%d:%d to CPU%d\n", 
 				queue.ifindex, queue.qidx, mtcp->ctx->cpu);
 #endif
-		ret = ps_attach_rx_device(handle, &queue);
+		ret = ps_attach_rx_device(handle, queue);
 		if (ret != 0) {
 			perror("ps_attach_rx_device");
 			exit(1);
 		}
-
 	}
+
 	return working;
+}
+
+static void
+DetachDevice(struct mtcp_thread_context* ctx)
+{
+	int i;
+	struct ps_device *device;
+	struct ps_queue *queue;
+	struct ps_handle *handle = ctx->handle;
+
+	for (i = 0 ; i < num_devices_attached ; i++) {
+		queue = &handle->rx_queues[i];
+
+		if (queue->qidx < 0)
+			continue;
+
+		device = &devices[queue->ifindex];
+
+		if (ps_detach_rx_device(handle, queue) != 0) {
+			perror("ps_detach_rx_device");
+			exit(1);
+		}
+
+		ps_free_qidx(device, ctx->cpu, queue->qidx);
+	}
 }
 /*----------------------------------------------------------------------------*/
 #ifdef NETSTAT
@@ -1575,6 +1601,12 @@ mtcp_destroy_context(mctx_t mctx)
 	SQ_LOCK_DESTROY(&ctx->sendq_lock);
 	SQ_LOCK_DESTROY(&ctx->ackq_lock);
 	SQ_LOCK_DESTROY(&ctx->destroyq_lock);
+
+	// Detach (nic device, queue)
+	DetachDevice(ctx);
+
+	// Close handle
+	ps_close_handle(ctx->handle);
 
 	//TRACE_INFO("MTCP thread %d destroyed.\n", mctx->cpu);
 	free(ctx->handle);

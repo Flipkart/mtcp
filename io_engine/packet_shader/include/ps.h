@@ -230,6 +230,8 @@ static inline void memcpy_aligned(void *to, const void *from, size_t len)
 struct ps_handle {
 	int fd;
 
+	struct ps_queue rx_queues[MAX_DEVICES];
+
 	uint64_t rx_chunks[MAX_DEVICES];
 	uint64_t rx_packets[MAX_DEVICES];
 	uint64_t rx_bytes[MAX_DEVICES];
@@ -244,6 +246,8 @@ struct ps_handle {
 int ps_list_devices(struct ps_device *devices);
 int ps_init_handle(struct ps_handle *handle);
 void ps_close_handle(struct ps_handle *handle);
+int ps_alloc_qidx(struct ps_device *device, int cpu);
+void ps_free_qidx(struct ps_device *device, int cpu, int qidx);
 int ps_attach_rx_device(struct ps_handle *handle, struct ps_queue *queue);
 int ps_detach_rx_device(struct ps_handle *handle, struct ps_queue *queue);
 int ps_alloc_chunk(struct ps_handle *handle, struct ps_chunk *chunk);
