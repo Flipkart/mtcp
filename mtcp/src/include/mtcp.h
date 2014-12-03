@@ -41,7 +41,7 @@
 /* configrations */
 #define BACKLOG_SIZE (10*1024)
 #define MAX_PKT_SIZE (2*1024)
-#define ETH_NUM 4
+#define ETH_NUM MAX_DEVICES
 
 #define TCP_OPT_TIMESTAMP_ENABLED   TRUE
 #define TCP_OPT_SACK_ENABLED        FALSE
