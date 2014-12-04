@@ -112,17 +112,19 @@ AttachDevice(struct mtcp_thread_context* ctx)
 {
 	int ret;
 	int working = -1;
-	int i;
+	int i, ifindex;
 	struct ps_device *device;
 	struct ps_queue *queue;
 	struct ps_handle *handle = ctx->handle;
 
 	// attaching (device, queue)
+	handle->queue_count = 0;
 	for (i = 0 ; i < num_devices_attached ; i++) {
-		device = &devices[devices_attached[i]];
-		queue = &handle->queues[i];
+		ifindex = devices_attached[i];
+		device = &devices[ifindex];
+		queue = &handle->queues[handle->queue_count];
 
-		queue->ifindex = devices_attached[i];
+		queue->ifindex = ifindex;
 		queue->qidx = ps_alloc_qidx(device, ctx->cpu);
 		if (queue->qidx < 0)
 			continue;
@@ -137,6 +139,8 @@ AttachDevice(struct mtcp_thread_context* ctx)
 			perror("ps_attach_rx_device");
 			exit(1);
 		}
+
+		handle->queue_count++;
 	}
 
 	return working;
@@ -150,12 +154,8 @@ DetachDevice(struct mtcp_thread_context* ctx)
 	struct ps_queue *queue;
 	struct ps_handle *handle = ctx->handle;
 
-	for (i = 0 ; i < num_devices_attached ; i++) {
+	for (i = 0 ; i < handle->queue_count ; i++) {
 		queue = &handle->queues[i];
-
-		if (queue->qidx < 0)
-			continue;
-
 		device = &devices[queue->ifindex];
 
 		if (ps_detach_rx_device(handle, queue) != 0) {
@@ -164,7 +164,12 @@ DetachDevice(struct mtcp_thread_context* ctx)
 		}
 
 		ps_free_qidx(device, ctx->cpu, queue->qidx);
+
+		queue->ifindex = -1;
+		queue->qidx = -1;
 	}
+
+	handle->queue_count = 0;
 }
 /*----------------------------------------------------------------------------*/
 #ifdef NETSTAT
@@ -803,7 +808,7 @@ RunMainLoop(struct mtcp_thread_context *ctx)
 #if E_PSIO
 	struct ps_event event;
 	int rx_inf, tx_inf;
-	nids_set rx_avail, tx_avail;
+	nids_set rx_avail, tx_avail = 0;
 	struct timeval last_tx_set[ETH_NUM];
 #endif
 
@@ -1445,10 +1450,8 @@ mctx_t
 mtcp_create_context(int cpu)
 {
 	mctx_t mctx;
-	int ret;
 	
-	ret = sem_init(&g_init_sem[cpu], 0, 0);
-	if (ret) {
+	if (sem_init(&g_init_sem[cpu], 0, 0)) {
 		TRACE_ERROR("Failed initialize init_sem.\n");
 		return NULL;
 	}
@@ -1505,7 +1508,7 @@ mtcp_destroy_context(mctx_t mctx)
 	struct mtcp_thread_context *ctx = g_pctx[mctx->cpu];
 	struct mtcp_manager *mtcp = ctx->mtcp_manager;
 	struct log_thread_context *log_ctx = mtcp->logger;
-	int ret, i;
+	int i;
 
 	TRACE_DBG("CPU %d: mtcp_destroy_context()\n", mctx->cpu);
 
@@ -1543,8 +1546,8 @@ mtcp_destroy_context(mctx_t mctx)
 #endif
 
 	log_ctx->done = 1;
-	ret = write(log_ctx->pair_sp_fd, "F", 1);
-	assert(ret == 1);
+	if (write(log_ctx->pair_sp_fd, "F", 1) != 1)
+		assert(0);
 	pthread_join(log_thread[ctx->cpu], NULL);
 	fclose(mtcp->log_fp);
 	TRACE_LOG("Log thread %d joined.\n", mctx->cpu);

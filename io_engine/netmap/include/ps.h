@@ -2,7 +2,6 @@
 #define _PS_H_
 
 #define MAX_DEVICES	16
-#define MAX_RINGS	64
 
 #define E_PSIO		FALSE
 #define USE_CHUNK_BUF	FALSE
@@ -10,6 +9,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <sys/poll.h>
 #include <linux/types.h>
 
 #define __user
@@ -76,7 +76,7 @@ struct ps_queue {
 };
 
 #define MAX_PACKET_SIZE	2048
-#define MAX_CHUNK_SIZE	4096
+#define MAX_CHUNK_SIZE	1024
 
 struct ps_pkt_info {
 	uint32_t offset;
@@ -140,15 +140,10 @@ static inline void memcpy_aligned(void *to, const void *from, size_t len)
 struct ps_handle {
 	int fd;
 
+	int queue_count;
 	struct ps_queue queues[MAX_DEVICES];
 
-	uint64_t rx_chunks[MAX_DEVICES];
-	uint64_t rx_packets[MAX_DEVICES];
-	uint64_t rx_bytes[MAX_DEVICES];
-
-	uint64_t tx_chunks[MAX_DEVICES];
-	uint64_t tx_packets[MAX_DEVICES];
-	uint64_t tx_bytes[MAX_DEVICES];
+	struct pollfd pfds[MAX_DEVICES];
 
 	void *priv;
 };
