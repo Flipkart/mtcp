@@ -1,5 +1,5 @@
 
-NETMAP_INC_DIR = ../../../netmap/sys
+NETMAP_INC_DIR = ../../../../netmap/sys
 
 .PHONY: clean
 
