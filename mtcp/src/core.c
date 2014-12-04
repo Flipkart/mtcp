@@ -1696,7 +1696,7 @@ mtcp_init(char *config_file)
 	}
 
 	num_devices = ps_list_devices(devices);
-	if (num_devices == -1) {
+	if (num_devices <= 0) {
 		perror("ps_list_devices");
 		return -1;
 	}
