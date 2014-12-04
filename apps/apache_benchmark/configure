@@ -5432,10 +5432,10 @@ $as_echo "#define HAVE_MTCP 1" >>confdefs.h
 
 
   if test "x$INCLUDES" = "x"; then
-    test "x$silent" != "xyes" && echo "  setting INCLUDES to \"-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine\""
-    INCLUDES="-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine"
+    test "x$silent" != "xyes" && echo "  setting INCLUDES to \"-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine/packet_shader\""
+    INCLUDES="-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine/packet_shader"
   else
-    apr_addto_bugger="-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine"
+    apr_addto_bugger="-I\$(top_srcdir)/../../mtcp/include -I\$(top_srcdir)/../../io_engine/packet_shader"
     for i in $apr_addto_bugger; do
       apr_addto_duplicate="0"
       for j in $INCLUDES; do
@@ -5453,10 +5453,10 @@ $as_echo "#define HAVE_MTCP 1" >>confdefs.h
 
 
   if test "x$LDFLAGS" = "x"; then
-    test "x$silent" != "xyes" && echo "  setting LDFLAGS to \"-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/lib\""
-    LDFLAGS="-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/lib"
+    test "x$silent" != "xyes" && echo "  setting LDFLAGS to \"-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/packet_shader/lib\""
+    LDFLAGS="-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/packet_shader/lib"
   else
-    apr_addto_bugger="-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/lib"
+    apr_addto_bugger="-L\$(top_srcdir)/../../mtcp/lib -L\$(top_srcdir)/../../io_engine/packet_shader/lib"
     for i in $apr_addto_bugger; do
       apr_addto_duplicate="0"
       for j in $LDFLAGS; do

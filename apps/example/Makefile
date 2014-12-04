@@ -14,8 +14,8 @@ MTCP_FLD = ../../mtcp/lib
 MTCP_INC = ../../mtcp/include
 MTCP_LIB = ${MTCP_FLD}/libmtcp.a
 
-PS_FLD = ../../io_engine/lib
-PS_INC = ../../io_engine/include
+PS_FLD = ../../io_engine/packet_shader/lib
+PS_INC = ../../io_engine/packet_shader/include
 
 INC = -I./include/ -I${UTIL_INC} -I${MTCP_INC} -I${PS_INC}
 LIBS = -lnuma -lmtcp -lps -lpthread -lrt

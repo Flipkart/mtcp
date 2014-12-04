@@ -2635,8 +2635,8 @@ AC_ARG_WITH([libmtcp],
 
 if test "$use_mtcp" != "no"; then
     AC_DEFINE([HAVE_MTCP], [1], [Define if you have mtcp library])
-    APR_ADDTO(INCLUDES, [-I$top_builddir/../../../../mtcp/include -I$top_builddir/../../../../io_engine])
-    APR_ADDTO(LDFLAGS, [-L$top_builddir/../../../../mtcp/lib -L$top_builddir/../../../../io_engine/lib])
+    APR_ADDTO(INCLUDES, [-I$top_builddir/../../../../mtcp/include -I$top_builddir/../../../../io_engine/packet_shader])
+    APR_ADDTO(LDFLAGS, [-L$top_builddir/../../../../mtcp/lib -L$top_builddir/../../../../io_engine/packet_shader/lib])
     APR_ADDTO(LIBS, [-lps -lmtcp -lnuma])
     AC_MSG_RESULT(yes)
 else
