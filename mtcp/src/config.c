@@ -257,28 +257,13 @@ SetRoutingTable()
 int 
 GetNumQueues()
 {
-	FILE *fp;
-	char buf[MAX_PROCLINE_LEN];
-	int queue_cnt;
-		
-	fp = fopen("/proc/interrupts", "r");
-	if (!fp) {
-		TRACE_CONFIG("Failed to read data from /proc/interrupts!\n");
-		return -1;
-	}
+	int i, queue_cnt;
 
-	/* count number of NIC queues from /proc/interrupts */
-	queue_cnt = 0;
-	while (!feof(fp)) {
-		if (fgets(buf, MAX_PROCLINE_LEN, fp) == NULL)
-			break;
-
-		/* "xge0-rx" is the keyword for counting queues */
-		if (strstr(buf, "xge0-rx")) {
-			queue_cnt++;
-		}
+	queue_cnt = (num_devices) ? devices[0].num_rx_queues : 0;
+	for (i = 0; i < num_devices; i++) {
+		if (devices[i].num_rx_queues < queue_cnt)
+			queue_cnt = devices[i].num_rx_queues;
 	}
-	fclose(fp);
 
 	return queue_cnt;
 }
