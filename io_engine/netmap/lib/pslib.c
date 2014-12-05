@@ -23,6 +23,9 @@
 #define NETMAP_MAX_QUEUES_PER_DEVICE	64
 
 struct netmap_priv_device {
+	pthread_mutex_t host_mutex;
+	struct nm_desc *host_nmd;
+
 	struct nm_desc *nmd;
 
 	struct ps_device *dev;
@@ -33,8 +36,6 @@ struct netmap_priv_device {
 };
 
 static char *nic_ifnames;
-static pthread_mutex_t host_mutex;
-static struct nm_desc *host_nmd;
 static int ndevs_count;
 static struct netmap_priv_device ndevs[MAX_DEVICES];
 
@@ -45,10 +46,22 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 	struct ps_device *dev = &devices[ifindex];
 	struct netmap_priv_device *ndev = &ndevs[ifindex];
 
+	pthread_mutex_init(&ndev->host_mutex, NULL);
+
+	snprintf(ifn, sizeof(ifn), "netmap:%s^", name);
+	ndev->host_nmd = nm_open(ifn, NULL, 0, NULL);
+	if (!ndev->host_nmd) {
+		printf("%s: failed to open host netmap for %s\n",
+			__func__, name);
+		assert(0);
+		return -1;
+	}
+
 	snprintf(ifn, sizeof(ifn), "netmap:%s", name);
-	ndev->nmd = nm_open(ifn, NULL, NM_OPEN_NO_MMAP, host_nmd);
+	ndev->nmd = nm_open(ifn, NULL, NM_OPEN_NO_MMAP, ndev->host_nmd);
 	if (!ndev->nmd) {
-		printf("%s: cannot open %s\n", __func__, ifn);
+		printf("%s: failed to open NIC netmap for %s\n",
+			__func__, name);
 		return -1;
 	}
 
@@ -86,15 +99,7 @@ int ps_list_devices(struct ps_device *devices)
 		return -1;
 	}
 
-	pthread_mutex_init(&host_mutex, NULL);
-
 	memset(ifname, 0, sizeof(ifname));
-	host_nmd = nm_open(ifname, NULL, 0, NULL);
-	if (!host_nmd) {
-		printf("%s: failed to open host netmap\n", __func__);
-		assert(0);
-		return -1;
-	}
 
 	ndevs_count = 0;
 	memset(ndevs, 0, sizeof(ndevs));
@@ -391,6 +396,7 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 {
 	u_int cur;
 	int ret = 1, ifindex = packet->ifindex;
+	struct netmap_priv_device *ndev;
 	struct netmap_slot *slot;
 	struct netmap_ring *txring;
 
@@ -399,11 +405,12 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 		assert(0);
 	}
 
-	/* Find netmap netmap ring */
-	txring = NETMAP_TXRING(host_nmd->nifp, 0);
+	/* Find netmap private device and netmap ring */
+	ndev = &ndevs[ifindex];
+	txring = NETMAP_TXRING(ndev->host_nmd->nifp, 0);
 
 	/* Lock host netmap */
-	pthread_mutex_lock(&host_mutex);
+	pthread_mutex_lock(&ndev->host_mutex);
 
 	/* Recheck space availablity in netmap ring */
 	if (!nm_ring_space(txring)) {
@@ -427,11 +434,11 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	txring->head = txring->cur = nm_ring_next(txring, cur);
 
 	/* Notify netmap kernel module about available packets */
-	ioctl(host_nmd->fd, NIOCTXSYNC, NULL);
+	ioctl(ndev->host_nmd->fd, NIOCTXSYNC, NULL);
 
 done:
 	/* Lock host netmap */
-	pthread_mutex_unlock(&host_mutex);
+	pthread_mutex_unlock(&ndev->host_mutex);
 
 	return ret;
 }
