@@ -69,7 +69,7 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 	dev->ifindex = ifindex;
 	dev->kifindex = ifindex;
 	dev->num_rx_queues = ndev->nmd->req.nr_rx_rings;
-	dev->num_tx_queues = ndev->nmd->req.nr_rx_rings;
+	dev->num_tx_queues = ndev->nmd->req.nr_tx_rings;
 	ndev->dev = dev;
 
 	pthread_mutex_init(&ndev->queue_mutex, NULL);
@@ -81,6 +81,8 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 
 	for (i = 0; i < ndev->queue_count; i++)
 		ndev->queue_avail[i] = 1;
+
+	dev->num_rx_queues = dev->num_tx_queues = ndev->queue_count;
 
 	return 0;
 }
