@@ -360,8 +360,7 @@ CheckRtmTimeout(mtcp_manager_t mtcp, uint32_t cur_ts, int thresh)
 	tcp_stream *walk, *next;
 	struct rto_head* rto_list;
 	int cnt;
-	int ret;
-	
+
 	if (!mtcp->rto_list_cnt) {
 		return;
 	}
@@ -388,7 +387,7 @@ CheckRtmTimeout(mtcp_manager_t mtcp, uint32_t cur_ts, int thresh)
 					cnt, walk->s_id);
 
 			if (walk->on_rto_idx >= 0) {
-				ret = HandleRTO(mtcp, cur_ts, walk);
+				HandleRTO(mtcp, cur_ts, walk);
 				TAILQ_REMOVE(rto_list, walk, sndvar->timer_link);
 				mtcp->rto_list_cnt--;
 				walk->on_rto_idx = -1;

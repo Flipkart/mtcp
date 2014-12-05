@@ -194,9 +194,6 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 	tcp_stream *stream = NULL;
 	int ret;
 
-	uint8_t *sa;
-	uint8_t *da;
-	
 	pthread_mutex_lock(&mtcp->ctx->flow_pool_lock);
 
 	stream = (tcp_stream *)MPAllocateChunk(mtcp->flow_pool);
@@ -312,13 +309,15 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 		return NULL;
 	}
 
-	sa = (uint8_t *)&stream->saddr;
-	da = (uint8_t *)&stream->daddr;
+#define	sa	((uint8_t *)&stream->saddr)
+#define da	((uint8_t *)&stream->daddr)
 	TRACE_STREAM("CREATED NEW TCP STREAM %d: "
 			"%u.%u.%u.%u(%d) -> %u.%u.%u.%u(%d) (ISS: %u)\n", stream->id, 
 			sa[0], sa[1], sa[2], sa[3], ntohs(stream->sport), 
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			stream->sndvar->iss);
+#undef sa
+#undef da
 
 	return stream;
 }
@@ -328,7 +327,6 @@ DestroyTCPStream(mtcp_manager_t mtcp, tcp_stream *stream)
 {
 	struct sockaddr_in addr;
 	int bound_addr = FALSE;
-	uint8_t *sa, *da;
 	int ret;
 
 #ifdef DUMP_STREAM
@@ -341,13 +339,15 @@ DestroyTCPStream(mtcp_manager_t mtcp, tcp_stream *stream)
 	}
 #endif
 
-	sa = (uint8_t *)&stream->saddr;
-	da = (uint8_t *)&stream->daddr;
+#define	sa	((uint8_t *)&stream->saddr)
+#define da	((uint8_t *)&stream->daddr)
 	TRACE_STREAM("DESTROY TCP STREAM %d: "
 			"%u.%u.%u.%u(%d) -> %u.%u.%u.%u(%d) (%s)\n", stream->id, 
 			sa[0], sa[1], sa[2], sa[3], ntohs(stream->sport), 
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			close_reason_str[stream->close_reason]);
+#undef sa
+#undef da
 
 	if (stream->sndvar->sndbuf) {
 		TRACE_FSTAT("Stream %d: send buffer "

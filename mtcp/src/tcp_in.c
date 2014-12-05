@@ -310,7 +310,6 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	uint32_t snd_wnd_prev;
 	uint32_t right_wnd_edge;
 	uint8_t dup;
-	int ret;
 
 	cwindow = window;
 	if (!tcph->syn) {
@@ -508,7 +507,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 				perror("ProcessACK: write_lock blocked\n");
 			assert(0);
 		}
-		ret = SBRemove(mtcp->rbm_snd, sndvar->sndbuf, rmlen);
+		SBRemove(mtcp->rbm_snd, sndvar->sndbuf, rmlen);
 		sndvar->snd_una = ack_seq;
 		snd_wnd_prev = sndvar->snd_wnd;
 		sndvar->snd_wnd = sndvar->sndbuf->size - sndvar->sndbuf->len;

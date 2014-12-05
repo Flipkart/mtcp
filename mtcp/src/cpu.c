@@ -36,6 +36,7 @@ mtcp_core_affinitize(int cpu)
 	int phy_id;
 	size_t n;
 	int ret;
+	int unused __attribute__((unused));
 
 	n = GetNumCPUs();
 
@@ -64,7 +65,7 @@ mtcp_core_affinitize(int cpu)
 		errno = EFAULT;
 		return -1;
 	}
-	fscanf(fp, "%d", &phy_id);
+	unused = fscanf(fp, "%d", &phy_id);
 
 	numa_bitmask_setbit(bmask, phy_id);
 	numa_set_membind(bmask);

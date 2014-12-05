@@ -67,6 +67,7 @@ static int printer = -1;
 #endif /* NETSTAT_TOTAL */
 #endif /* NETSTAT */
 /*----------------------------------------------------------------------------*/
+extern int sched_getcpu(void);
 void
 HandleSignal(int signal)
 {

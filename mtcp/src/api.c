@@ -931,7 +931,7 @@ static inline int
 CopyToUser(mtcp_manager_t mtcp, tcp_stream *cur_stream, char *buf, int len)
 {
 	struct tcp_recv_vars *rcvvar = cur_stream->rcvvar;
-	uint32_t prev_rcv_wnd;
+	uint32_t prev_rcv_wnd __attribute__((unused));
 	int copylen;
 
 	copylen = MIN(rcvvar->rcvbuf->merged_len, len);

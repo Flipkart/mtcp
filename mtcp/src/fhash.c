@@ -96,13 +96,13 @@ HTRemove(struct hashtable *ht, tcp_stream *item)
 tcp_stream* 
 HTSearch(struct hashtable *ht, const tcp_stream *item)
 {
-	int idx;
 	tcp_stream *walk;
 	hash_bucket_head *head;
+#if STATIC_TABLE
+	int idx;
 
 	idx = ht->hashfn(item);
 
-#if STATIC_TABLE
 	for (i = 0; i < TCP_AR_CNT; i++) {
 		if (ht->ht_array[idx][i]) {
 			if (ht->eqfn(ht->ht_array[idx][i], item)) 
