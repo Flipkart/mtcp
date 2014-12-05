@@ -143,9 +143,8 @@ struct ps_handle {
 	int queue_count;
 	struct ps_queue queues[MAX_DEVICES];
 
-	struct pollfd pfds[MAX_DEVICES];
-
-	void *priv;
+	/* Current Rx device for round-robin device polling */
+	int rx_device;
 };
 
 int ps_list_devices(struct ps_device *devices);
