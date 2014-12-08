@@ -20,12 +20,13 @@
 
 #include "../include/ps.h"
 
+#define TRACE_ERROR(msg...)	fprintf(stderr, msg)
+#define TRACE_INFO(msg...)	fprintf(stderr, msg)
+
 #define NETMAP_MAX_QUEUES_PER_DEVICE	64
 
 struct netmap_priv_device {
-	pthread_mutex_t host_mutex;
 	struct nm_desc *host_nmd;
-
 	struct nm_desc *nmd;
 
 	struct ps_device *dev;
@@ -46,13 +47,11 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 	struct ps_device *dev = &devices[ifindex];
 	struct netmap_priv_device *ndev = &ndevs[ifindex];
 
-	pthread_mutex_init(&ndev->host_mutex, NULL);
-
 	snprintf(ifn, sizeof(ifn), "netmap:%s^", name);
 	ndev->host_nmd = nm_open(ifn, NULL, 0, NULL);
 	if (!ndev->host_nmd) {
-		printf("%s: failed to open host netmap for %s\n",
-			__func__, name);
+		TRACE_ERROR("%s: failed to open host netmap for %s\n",
+			    __func__, name);
 		assert(0);
 		return -1;
 	}
@@ -60,8 +59,8 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 	snprintf(ifn, sizeof(ifn), "netmap:%s", name);
 	ndev->nmd = nm_open(ifn, NULL, NM_OPEN_NO_MMAP, ndev->host_nmd);
 	if (!ndev->nmd) {
-		printf("%s: failed to open NIC netmap for %s\n",
-			__func__, name);
+		TRACE_ERROR("%s: failed to open NIC netmap for %s\n",
+			    __func__, name);
 		return -1;
 	}
 
@@ -95,8 +94,8 @@ int ps_list_devices(struct ps_device *devices)
 
 	nic_ifnames = getenv(env);
 	if (!nic_ifnames) {
-		printf("%s: failed to get environment variable %s\n",
-			__func__, env);
+		TRACE_ERROR("%s: failed to get environment variable %s\n",
+			    __func__, env);
 		assert(0);
 		return -1;
 	}
@@ -121,8 +120,8 @@ int ps_list_devices(struct ps_device *devices)
 		if (j) {
 			ret = init_ndev(devices, ndevs_count, ifname);
 			if (ret) {
-				printf("%s: failed to init NIC %s "
-					"in netmap mode\n", __func__, ifname);
+				TRACE_ERROR("%s: failed to init NIC %s "
+					    "in netmap mode\n", __func__, ifname);
 				assert(0);
 				return ret;
 			}
@@ -136,8 +135,8 @@ int ps_list_devices(struct ps_device *devices)
 	if (j && (ndevs_count < MAX_DEVICES)) {
 		ret = init_ndev(devices, ndevs_count, ifname);
 		if (ret) {
-			printf("%s: failed to init NIC %s in netmap mode\n",
-				__func__, ifname);
+			TRACE_ERROR("%s: failed to init NIC %s in netmap mode\n",
+				    __func__, ifname);
 			assert(0);
 			return ret;
 		}
@@ -189,8 +188,8 @@ int ps_alloc_qidx(struct ps_device *device, int cpu)
 	pthread_mutex_unlock(&ndev->queue_mutex);
 
 	if (ret == -1) {
-		printf("%s: failed for device %s and cpu%d\n",
-			__func__, device->name, cpu);
+		TRACE_ERROR("%s: failed for device %s and cpu%d\n",
+			    __func__, device->name, cpu);
 		assert(0);
 	}
 
@@ -229,14 +228,14 @@ int ps_alloc_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	chunk->info = (struct ps_pkt_info *)malloc(
 			sizeof(struct ps_pkt_info) * MAX_CHUNK_SIZE);
 	if (!chunk->info) {
-		printf("%s: failed to alloc chunk info\n", __func__);
+		TRACE_ERROR("%s: failed to alloc chunk info\n", __func__);
 		assert(0);
 		return -1;
 	}
 
 	chunk->buf = malloc(MAX_PACKET_SIZE * MAX_CHUNK_SIZE);
 	if (!chunk->buf) {
-		printf("%s: failed to alloc chunk buffer\n", __func__);
+		TRACE_ERROR("%s: failed to alloc chunk buffer\n", __func__);
 		assert(0);
 		return -1;
 	}
@@ -283,8 +282,8 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 
 		/* Check poll return events */
 		if (pfds[i].revents & POLLERR) {
-			printf("%s: poll error for ifindex=%d\n",
-				__func__, queue->ifindex);
+			TRACE_ERROR("%s: poll error for ifindex=%d\n",
+				    __func__, queue->ifindex);
 		} else if (pfds[i].revents & POLLIN) {
 			/* Find out netmap Rx ring */
 			rxring = NETMAP_RXRING(ndev->nmd->nifp, queue->qidx);
@@ -312,11 +311,9 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 
 				/* Point to next netmap slot */
 				cur = nm_ring_next(rxring, cur);
+				rxring->head = rxring->cur = cur;
 				recv++;
 			}
-
-			/* Update netmap ring head */
-			rxring->head = rxring->cur = cur;
 		}
 
 		/* Point to next Rx device */
@@ -337,12 +334,13 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	u_int cur;
 	int i, ifindex = chunk->queue.ifindex;
 	struct ps_queue *queue;
+	struct pollfd pfd;
 	struct netmap_priv_device *ndev;
 	struct netmap_ring *txring;
 
 	/* Sanity check */
 	if ((ifindex < 0) || (MAX_DEVICES <= ifindex)) {
-		printf("%s: invalid ifindex=%d\n", __func__, ifindex);
+		TRACE_ERROR("%s: invalid ifindex=%d\n", __func__, ifindex);
 		assert(0);
 	}
 
@@ -354,7 +352,7 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 		}
 	}
 	if (!queue) {
-		printf("%s: tx queue not found for ifindex=%d\n",
+		TRACE_ERROR("%s: tx queue not found for ifindex=%d\n",
 			__func__, ifindex);
 		assert(0);
 	}
@@ -362,6 +360,16 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	/* Find netmap private device and netmap ring */
 	ndev = &ndevs[ifindex];
 	txring = NETMAP_TXRING(ndev->nmd->nifp, queue->qidx);
+
+        /* Wait for outgoing packets with 500ms timeout */
+        pfd.fd = ndev->nmd->fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        poll(&pfd, 1, 500);
+	if (pfd.revents & POLLERR) {
+		TRACE_ERROR("%s: poll error ifindex=%d\n", __func__, ifindex);
+		assert(0);
+	}
 
 	/* Find current netmap slot */
 	cur = txring->cur;
@@ -386,11 +394,6 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	/* Update netmap ring head */
 	txring->head = txring->cur = cur;
 
-	if (i) {
-		/* Notify netmap kernel module about available packets */
-		ioctl(ndev->nmd->fd, NIOCTXSYNC, NULL);
-	}
-
 	return i;
 }
 
@@ -398,12 +401,13 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 {
 	u_int cur;
 	int ret = 1, ifindex = packet->ifindex;
+	struct pollfd pfd;
 	struct netmap_priv_device *ndev;
 	struct netmap_slot *slot;
 	struct netmap_ring *txring;
 
 	if ((ifindex < 0) || (MAX_DEVICES <= ifindex)) {
-		printf("%s: invalid ifindex=%d\n", __func__, ifindex);
+		TRACE_ERROR("%s: invalid ifindex=%d\n", __func__, ifindex);
 		assert(0);
 	}
 
@@ -411,12 +415,8 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	ndev = &ndevs[ifindex];
 	txring = NETMAP_TXRING(ndev->host_nmd->nifp, 0);
 
-	/* Lock host netmap */
-	pthread_mutex_lock(&ndev->host_mutex);
-
 	/* Recheck space availablity in netmap ring */
 	if (!nm_ring_space(txring)) {
-		printf("%s: dropping packet\n", __func__);
 		ret = 0;
 		goto done;
 	}
@@ -425,6 +425,16 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	cur = txring->cur;
 	slot = &txring->slot[cur];
 
+        /* Wait for outgoing packets with 500ms timeout */
+        pfd.fd = ndev->host_nmd->fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        poll(&pfd, 1, 500);
+        if (pfd.revents & POLLERR) {
+                TRACE_ERROR("%s: poll error ifindex=%d\n", __func__, ifindex);
+                assert(0);
+        }
+        
 	/* Update current netmap slot */
 	nm_pkt_copy(packet->buf,
 		    NETMAP_BUF(txring, slot->buf_idx),
@@ -435,12 +445,6 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	/* Update netmap ring head */
 	txring->head = txring->cur = nm_ring_next(txring, cur);
 
-	/* Notify netmap kernel module about available packets */
-	ioctl(ndev->host_nmd->fd, NIOCTXSYNC, NULL);
-
 done:
-	/* Lock host netmap */
-	pthread_mutex_unlock(&ndev->host_mutex);
-
 	return ret;
 }
