@@ -163,10 +163,10 @@ PrintRoutingTable()
 		m = (uint8_t *)&CONFIG.rtable[i].mask;
 		md = (uint8_t *)&CONFIG.rtable[i].masked;
 		TRACE_CONFIG("Destination: %u.%u.%u.%u/%d, Mask: %u.%u.%u.%u, "
-				"Masked: %u.%u.%u.%u, Route: xge%d\n", 
+				"Masked: %u.%u.%u.%u, Route: %s\n",
 				da[0], da[1], da[2], da[3], CONFIG.rtable[i].prefix, 
 				m[0], m[1], m[2], m[3], md[0], md[1], md[2], md[3], 
-				CONFIG.rtable[i].nif);
+				devices[CONFIG.rtable[i].nif].name);
 	}
 	if (CONFIG.routes == 0)
 		TRACE_CONFIG("(blank)\n");
