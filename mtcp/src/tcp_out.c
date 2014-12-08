@@ -152,7 +152,7 @@ SendTCPPacketStandalone(struct mtcp_manager *mtcp,
 	}
 
 	tcph = (struct tcphdr *)IPOutputStandalone(mtcp, 0, 
-			saddr, daddr, TCP_HEADER_LEN + optlen + payloadlen);
+		saddr, daddr, IPPROTO_TCP, TCP_HEADER_LEN + optlen + payloadlen);
 	if (tcph == NULL) {
 		return ERROR;
 	}
