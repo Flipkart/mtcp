@@ -1969,7 +1969,7 @@ static void test(void)
     apr_size_t inbytes_left, outbytes_left;
 #endif
 #ifdef HAVE_MTCP
-    mtcp_init("config/mtcp.conf");
+    mtcp_init();
 #endif
     if (!use_html) {
         printf("Benchmarking %s ", hostname);

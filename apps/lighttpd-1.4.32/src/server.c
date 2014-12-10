@@ -1583,7 +1583,7 @@ main(int argc, char **argv) {
 
 #ifdef USE_MTCP
 	/* initialize the mtcp context */
-	if (mtcp_init("mtcp.conf")) {
+	if (mtcp_init()) {
 		fprintf(stderr, "Failed to initialize mtcp\n");
 		goto clean_up;
 	}

@@ -19,9 +19,6 @@
 #define MAX_OPTLINE_LEN 1024
 #define MAX_PROCLINE_LEN 1024
 
-static const char *route_file = "config/route.conf";
-static const char *arp_file = "config/arp.conf";
-
 /*----------------------------------------------------------------------------*/
 static int 
 GetIntValue(char* value)
@@ -47,6 +44,26 @@ MaskFromPrefix(int prefix)
 	}
 
 	return mask;
+}
+/*----------------------------------------------------------------------------*/
+static char *EnvGets(const char **env, char *out, size_t out_sz)
+{
+	int i = 0;
+
+	if (!env || !(*env) || (**env == '\0'))
+		return NULL;
+
+	while ((**env != '\0') && (**env != '\n') && (i < (out_sz-1))) {
+		out[i] = **env;
+		i++;
+		(*env)++;
+        }
+	out[i] = '\0';
+
+	if (**env == '\n')
+		(*env)++;
+
+	return out;
 }
 /*----------------------------------------------------------------------------*/
 static void
@@ -99,24 +116,22 @@ SetRoutingTableFromFile()
 {
 #define ROUTES "ROUTES"
 
-	FILE *fc;
+	const char *envval;
+	char env[] = "MTCP_ROUTE_CONFIG";
 	char optstr[MAX_OPTLINE_LEN];
 	int i;
 
-	TRACE_CONFIG("Loading routing configurations from : %s\n", route_file);
+	envval = getenv(env);
+	if (!envval)
+		envval = "";
 
-	fc = fopen(route_file, "r");
-	if (fc == NULL) {
-		perror("fopen");
-		TRACE_CONFIG("Skip loading static routing table\n");
-		return -1;
-	}
+	TRACE_CONFIG("Loading routing configuration from environment variable %s\n", env);
 
 	while (1) {
 		char *iscomment;
 		int num;
 
-		if (fgets(optstr, MAX_OPTLINE_LEN, fc) == NULL)
+		if (EnvGets(&envval, optstr, MAX_OPTLINE_LEN) == NULL)
 			break;
 
 		//skip comment
@@ -132,7 +147,7 @@ SetRoutingTableFromFile()
 				break;
 
 			for (i = 0; i < num; i++) {
-				if (fgets(optstr, MAX_OPTLINE_LEN, fc) == NULL)
+				if (EnvGets(&envval, optstr, MAX_OPTLINE_LEN) == NULL)
 					break;
 
 				if (*optstr == '#') {
@@ -144,7 +159,6 @@ SetRoutingTableFromFile()
 		}
 	}
 
-	fclose(fc);
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
@@ -429,27 +443,25 @@ LoadARPTable()
 {
 #define ARP_ENTRY "ARP_ENTRY"
 
-	FILE *fc;
+	const char *envval;
+	char env[] = "MTCP_ARP_CONFIG";
 	char optstr[MAX_OPTLINE_LEN];
 	int numEntry = 0;
 	int hasNumEntry = 0;
 
-	TRACE_CONFIG("Loading ARP table from : %s\n", arp_file);
+	envval = getenv(env);
+	if (!envval)
+		envval = "";
+
+	TRACE_CONFIG("Loading ARP table from environment variable %s\n", env);
 
 	InitARPTable();
-
-	fc = fopen(arp_file, "r");
-	if (fc == NULL) {
-		perror("fopen");
-		TRACE_CONFIG("Skip loading static ARP table\n");
-		return -1;
-	}
 
 	while (1) {
 		char *p;
 		char *temp;
 
-		if (fgets(optstr, MAX_OPTLINE_LEN, fc) == NULL)
+		if (EnvGets(&envval, optstr, MAX_OPTLINE_LEN) == NULL)
 			break;
 
 		p = optstr;
@@ -493,7 +505,6 @@ LoadARPTable()
 		}
 	}
 
-	fclose(fc);
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
@@ -579,21 +590,19 @@ ParseConfiguration(char *line)
 }
 /*----------------------------------------------------------------------------*/
 int 
-LoadConfiguration(char *fname)
+LoadConfiguration()
 {
-	FILE *fp;
+	const char *envval;
+	char env[] = "MTCP_GENERAL_CONFIG";
 	char optstr[MAX_OPTLINE_LEN];
+
+	envval = getenv(env);
+	if (!envval)
+		envval = "";
 
 	TRACE_CONFIG("----------------------------------------------------------"
 			"-----------------------\n");
-	TRACE_CONFIG("Loading mtcp configuration from : %s\n", fname);
-
-	fp = fopen(fname, "r");
-	if (fp == NULL) {
-		perror("fopen");
-		TRACE_CONFIG("Failed to load configuration file: %s\n", fname);
-		return -1;
-	}
+	TRACE_CONFIG("Loading mtcp configuration from environment variable %s\n", env);
 
 	/* set default configuration */
 	CONFIG.num_cores = num_cpus;
@@ -608,7 +617,7 @@ LoadConfiguration(char *fname)
 		char *p;
 		char *temp;
 
-		if (fgets(optstr, MAX_OPTLINE_LEN, fp) == NULL)
+		if (EnvGets(&envval, optstr, MAX_OPTLINE_LEN) == NULL)
 			break;
 
 		p = optstr;
@@ -628,8 +637,6 @@ LoadConfiguration(char *fname)
 		if (ParseConfiguration(p) < 0)
 			return -1;
 	}
-
-	fclose(fp);
 
 	return 0;
 }

@@ -1678,7 +1678,7 @@ mtcp_setconf(const struct mtcp_conf *conf)
 }
 /*----------------------------------------------------------------------------*/
 int 
-mtcp_init(char *config_file)
+mtcp_init()
 {
 	int i;
 	int ret;
@@ -1708,7 +1708,7 @@ mtcp_init(char *config_file)
 		return -1;
 	}
 
-	ret = LoadConfiguration(config_file);
+	ret = LoadConfiguration();
 	if (ret) {
 		TRACE_CONFIG("Error occured while loading configuration.\n");
 		return -1;

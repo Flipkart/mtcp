@@ -768,7 +768,7 @@ main(int argc, char **argv)
 		TRACE_CONFIG("Output file: %s\n", outfile);
 	}
 
-	ret = mtcp_init("epwget.conf");
+	ret = mtcp_init();
 	if (ret) {
 		TRACE_ERROR("Failed to initialize mtcp.\n");
 		exit(EXIT_FAILURE);

@@ -624,7 +624,7 @@ main(int argc, char **argv)
 	finished = 0;
 
 	/* initialize mtcp */
-	ret = mtcp_init("epserver.conf");
+	ret = mtcp_init();
 	if (ret) {
 		TRACE_ERROR("Failed to initialize mtcp\n");
 		exit(EXIT_FAILURE);

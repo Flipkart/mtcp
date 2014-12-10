@@ -12,7 +12,7 @@ int num_devices_attached;
 int devices_attached[MAX_DEVICES];
 
 int 
-LoadConfiguration(char *fname);
+LoadConfiguration();
 
 /* set configurations from the setted 
    interface information */
