@@ -26,6 +26,7 @@
 #define NETMAP_MAX_QUEUES_PER_DEVICE	64
 
 struct netmap_priv_device {
+	pthread_spinlock_t host_lock;
 	struct nm_desc *host_nmd;
 	struct nm_desc *nmd;
 
@@ -47,6 +48,7 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 	struct ps_device *dev = &devices[ifindex];
 	struct netmap_priv_device *ndev = &ndevs[ifindex];
 
+	pthread_spin_init(&ndev->host_lock, 0);
 	snprintf(ifn, sizeof(ifn), "netmap:%s^", name);
 	ndev->host_nmd = nm_open(ifn, NULL, 0, NULL);
 	if (!ndev->host_nmd) {
@@ -252,89 +254,12 @@ void ps_free_chunk(struct ps_chunk *chunk)
 	chunk->buf = NULL;
 }
 
-int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
-{
-	u_int cur;
-	int i, recv, count;
-	struct pollfd pfds[MAX_DEVICES];
-	struct ps_queue *queue;
-	struct netmap_priv_device *ndev;
-	struct netmap_ring *rxring;
-
-	/* Setup poll structure */
-	for (i = 0; i < handle->queue_count; i++) {
-		ndev = &ndevs[handle->queues[i].ifindex];
-		pfds[i].fd = ndev->nmd->fd;
-		pfds[i].events = POLLIN;
-		pfds[i].revents = 0;
-	}
-
-	/* Wait for incoming packets with 500ms timeout */
-	poll(pfds, handle->queue_count, 500);
-
-	/* Check each device for Rx packets starting from handle->rx_device */
-	recv = 0;
-	i = handle->rx_device;
-	count = handle->queue_count;
-	while (count && !recv) {
-		queue = &handle->queues[i];
-		ndev = &ndevs[queue->ifindex];
-
-		/* Check poll return events */
-		if (pfds[i].revents & POLLERR) {
-			TRACE_ERROR("%s: poll error for ifindex=%d\n",
-				    __func__, queue->ifindex);
-		} else if (pfds[i].revents & POLLIN) {
-			/* Find out netmap Rx ring */
-			rxring = NETMAP_RXRING(ndev->nmd->nifp, queue->qidx);
-			cur = rxring->cur;
-
-			/* Copy over Rx packets to chunk */
-			while (!nm_ring_empty(rxring) &&
-				(recv < chunk->cnt)) {
-				struct netmap_slot *slot = &rxring->slot[cur];
-
-				/* Update offset and len in chunk */
-				if (recv) {
-					chunk->info[recv].offset =
-						chunk->info[recv-1].offset +
-						chunk->info[recv-1].len;
-				} else {
-					chunk->info[recv].offset = 0;
-				}
-				chunk->info[recv].len = slot->len;
-
-				/* Copy single Rx packet to chunk */
-				nm_pkt_copy(NETMAP_BUF(rxring, slot->buf_idx),
-					chunk->buf + chunk->info[recv].offset,
-					chunk->info[recv].len);
-
-				/* Point to next netmap slot */
-				cur = nm_ring_next(rxring, cur);
-				rxring->head = rxring->cur = cur;
-				recv++;
-			}
-		}
-
-		/* Point to next Rx device */
-		i++;
-		if (i == handle->queue_count) {
-			i = 0;
-		}
-		count--;
-	}
-	handle->rx_device = i;
-
-	return recv;
-}
-
 /* Send the given chunk to the modified driver. */
 int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 {
 	u_int cur;
-	int i, ifindex = chunk->queue.ifindex;
+	int i, send = 0, ifindex = chunk->queue.ifindex;
 	struct ps_queue *queue;
-	struct pollfd pfd;
 	struct netmap_priv_device *ndev;
 	struct netmap_ring *txring;
 
@@ -361,47 +286,37 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	ndev = &ndevs[ifindex];
 	txring = NETMAP_TXRING(ndev->nmd->nifp, queue->qidx);
 
-        /* Wait for outgoing packets with 500ms timeout */
-        pfd.fd = ndev->nmd->fd;
-        pfd.events = POLLOUT;
-        pfd.revents = 0;
-        poll(&pfd, 1, 500);
-	if (pfd.revents & POLLERR) {
-		TRACE_ERROR("%s: poll error ifindex=%d\n", __func__, ifindex);
-		assert(0);
-	}
-
-	/* Find current netmap slot */
+	/* Find current netmap slot in NIC Tx ring */
 	cur = txring->cur;
 
 	/* Copy over the packets to netmap ring */
-	i = 0;
-	while (nm_ring_space(txring) && (i < chunk->cnt)) {
+	while (nm_ring_space(txring) && (send < chunk->cnt)) {
 		struct netmap_slot *slot = &txring->slot[cur];
 
 		/* Update current netmap slot */
-		nm_pkt_copy(chunk->buf + chunk->info[i].offset,
+		nm_pkt_copy(chunk->buf + chunk->info[send].offset,
 			    NETMAP_BUF(txring, slot->buf_idx),
-			    chunk->info[i].len);
+			    chunk->info[send].len);
 		slot->flags = 0;
-		slot->len = chunk->info[i].len;
+		slot->len = chunk->info[send].len;
+		send++;
 
 		/* Point to next netmap slot */
 		cur = nm_ring_next(txring, cur);
-		i++;
+		txring->head = txring->cur = cur;
 	}
 
-	/* Update netmap ring head */
-	txring->head = txring->cur = cur;
+	/* Notify kernel about packets */
+	if (send)
+		ioctl(ndev->nmd->fd, NIOCTXSYNC, NULL);
 
-	return i;
+	return send;
 }
 
 int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 {
 	u_int cur;
 	int ret = 1, ifindex = packet->ifindex;
-	struct pollfd pfd;
 	struct netmap_priv_device *ndev;
 	struct netmap_slot *slot;
 	struct netmap_ring *txring;
@@ -413,7 +328,11 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 
 	/* Find netmap private device and netmap ring */
 	ndev = &ndevs[ifindex];
-	txring = NETMAP_TXRING(ndev->host_nmd->nifp, 0);
+	txring = NETMAP_TXRING(ndev->host_nmd->nifp,
+					ndev->host_nmd->last_tx_ring);
+
+	/* Lock host ring of netmap private device */
+	pthread_spin_lock(&ndev->host_lock);
 
 	/* Recheck space availablity in netmap ring */
 	if (!nm_ring_space(txring)) {
@@ -425,26 +344,164 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	cur = txring->cur;
 	slot = &txring->slot[cur];
 
-        /* Wait for outgoing packets with 500ms timeout */
-        pfd.fd = ndev->host_nmd->fd;
-        pfd.events = POLLOUT;
-        pfd.revents = 0;
-        poll(&pfd, 1, 500);
-        if (pfd.revents & POLLERR) {
-                TRACE_ERROR("%s: poll error ifindex=%d\n", __func__, ifindex);
-                assert(0);
-        }
-        
 	/* Update current netmap slot */
 	nm_pkt_copy(packet->buf,
 		    NETMAP_BUF(txring, slot->buf_idx),
 		    packet->len);
 	slot->flags = 0;
 	slot->len = packet->len;
+	ret = 1;
 
 	/* Update netmap ring head */
 	txring->head = txring->cur = nm_ring_next(txring, cur);
 
 done:
+	/* Unlock host ring of netmap private device */
+	pthread_spin_unlock(&ndev->host_lock);
+
+	/* Notify kernel about packets */
+	if (ret)
+		ioctl(ndev->host_nmd->fd, NIOCTXSYNC, NULL);
+
 	return ret;
 }
+
+int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
+{
+	u_int cur, host_cur;
+	int host_send;
+	int i, recv, count;
+	struct pollfd pfds[MAX_DEVICES*2];
+	struct ps_queue *queue;
+	struct netmap_priv_device *ndev;
+	struct netmap_ring *rxring;
+	struct netmap_ring *txring;
+	struct netmap_ring *host_rxring;
+
+	/* Setup poll structure */
+	for (i = 0; i < handle->queue_count*2; i+=2) {
+		ndev = &ndevs[handle->queues[i].ifindex];
+		pfds[i].fd = ndev->nmd->fd;
+		pfds[i].events = POLLIN;
+		pfds[i].revents = 0;
+		pfds[i+1].fd = ndev->host_nmd->fd;
+		pfds[i+1].events = POLLIN;
+		pfds[i+1].revents = 0;
+	}
+
+	/* Wait for incoming packets with No timeout */
+	poll(pfds, handle->queue_count*2, handle->queue_count*500);
+
+	/* Check each device for Rx packets starting from handle->rx_device */
+	recv = 0;
+	i = handle->rx_device;
+	count = handle->queue_count;
+	while (count && !recv) {
+		queue = &handle->queues[i];
+		ndev = &ndevs[queue->ifindex];
+
+		/* Check for poll error */
+		if (pfds[2*i].revents & POLLERR) {
+			/* Find out netmap Rx ring */
+			rxring = NETMAP_RXRING(ndev->nmd->nifp, queue->qidx);
+			TRACE_ERROR("%s: poll error for ifindex=%d empty=%d\n",
+				    __func__, queue->ifindex, nm_ring_empty(rxring));
+		}
+
+		/* Check for poll in */
+		if (pfds[2*i].revents & POLLIN) {
+			/* Find out netmap NIC Rx ring */
+			rxring = NETMAP_RXRING(ndev->nmd->nifp, queue->qidx);
+			cur = rxring->cur;
+
+			/* Copy over NIC Rx packets to chunk */
+			while (!nm_ring_empty(rxring) &&
+				(recv < chunk->cnt)) {
+				struct netmap_slot *slot = &rxring->slot[cur];
+
+				/* Forward single Rx packet to mTCP */
+				if (recv) {
+					chunk->info[recv].offset =
+						chunk->info[recv-1].offset +
+						chunk->info[recv-1].len;
+				} else {
+					chunk->info[recv].offset = 0;
+				}
+				chunk->info[recv].len = slot->len;
+				nm_pkt_copy(NETMAP_BUF(rxring, slot->buf_idx),
+					chunk->buf + chunk->info[recv].offset,
+					chunk->info[recv].len);
+				recv++;
+
+				/* Point to next netmap slot */
+				cur = nm_ring_next(rxring, cur);
+				rxring->head = rxring->cur = cur;
+			}
+		}
+
+		/* Check for poll error */
+		if (pfds[2*i+1].revents & POLLERR) {
+			/* Find out netmap Rx ring */
+			rxring = NETMAP_RXRING(ndev->host_nmd->nifp,
+					       ndev->host_nmd->last_rx_ring);
+			TRACE_ERROR("%s: poll error for ifindex=%d\n",
+				    __func__, queue->ifindex);
+		}
+
+		/* Check for poll in */
+		if (pfds[2*i+1].revents & POLLIN) {
+			/* Find out netmap host Rx ring */
+			host_rxring = NETMAP_RXRING(ndev->host_nmd->nifp,
+						ndev->host_nmd->last_rx_ring);
+			host_cur = host_rxring->cur;
+
+			/* Find out netmap NIC Tx ring */
+			txring = NETMAP_TXRING(ndev->nmd->nifp, queue->qidx);
+			cur = txring->cur;
+
+			/* Lock host ring of netmap private device */
+			pthread_spin_lock(&ndev->host_lock);
+
+			/* Copy over host packets to Tx ring */
+			host_send = 0;
+			while (!nm_ring_empty(host_rxring) &&
+				nm_ring_space(txring) &&
+				(host_send < 4)) {
+				struct netmap_slot *host_slot =
+						&host_rxring->slot[host_cur];
+				struct netmap_slot *slot = &txring->slot[cur];
+				uint32_t buf_idx = host_slot->buf_idx;
+
+				/* Zero-copy */
+				host_slot->buf_idx = slot->buf_idx;
+				slot->buf_idx = buf_idx;
+				host_slot->flags |= NS_BUF_CHANGED;
+				slot->flags |= NS_BUF_CHANGED;
+				slot->len = host_slot->len;
+				host_send++;
+
+				/* Point to next netmap slot in host Rx ring */
+				host_cur = nm_ring_next(host_rxring, host_cur);
+				host_rxring->head = host_rxring->cur = host_cur;
+
+				/* Point to next netmap slot in Tx Ring */
+				cur = nm_ring_next(txring, cur);
+				txring->head = txring->cur = cur;
+			}
+
+			/* Unlock host ring of netmap private device */
+			pthread_spin_unlock(&ndev->host_lock);
+		}
+
+		/* Point to next Rx device */
+		i++;
+		if (i == handle->queue_count) {
+			i = 0;
+		}
+		count--;
+	}
+	handle->rx_device = i;
+
+	return recv;
+}
+
