@@ -35,14 +35,12 @@ ProcessPacket(mtcp_manager_t mtcp, const int ifidx,
 	if (ip_proto == ETH_P_IP) {
 		/* process ipv4 packet */
 		ret = ProcessIPv4Packet(mtcp, cur_ts, ifidx, pkt_data, len);
-
-	} else if (ip_proto == ETH_P_ARP) {
-		ProcessARPPacket(mtcp, cur_ts, ifidx, pkt_data, len);
-		return TRUE;
-
 	} else {
 		//DumpPacket(mtcp, (char *)pkt_data, len, "??", ifidx);
 		struct ps_packet packet;
+		if (ip_proto == ETH_P_ARP) {
+			ProcessARPPacket(mtcp, cur_ts, ifidx, pkt_data, len);
+		}
 		packet.ifindex = ifidx;
 		packet.len = len;
 		packet.buf = (char *)pkt_data;

@@ -40,7 +40,6 @@ ProcessIPv4Packet(mtcp_manager_t mtcp, uint32_t cur_ts,
 		packet.len = len;
 		packet.buf = (char *)pkt_data;
 		ps_slowpath_packet(mtcp->ctx->handle, &packet);
-
 		return FALSE;
 	}
 	
@@ -48,7 +47,13 @@ ProcessIPv4Packet(mtcp_manager_t mtcp, uint32_t cur_ts,
 		case IPPROTO_TCP:
 			return ProcessTCPPacket(mtcp, cur_ts, iph, ip_len);
 		default:
-			/* currently drop other protocols */
+			do {
+				struct ps_packet packet;
+				packet.ifindex = ifidx;
+				packet.len = len;
+				packet.buf = (char *)pkt_data;
+				ps_slowpath_packet(mtcp->ctx->handle, &packet);
+			} while (0);
 			return FALSE;
 	}
 	return FALSE;
