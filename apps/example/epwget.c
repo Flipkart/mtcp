@@ -768,6 +768,11 @@ main(int argc, char **argv)
 		TRACE_CONFIG("Output file: %s\n", outfile);
 	}
 
+	ret = ps_init();
+	if (ret) {
+		TRACE_ERROR("Failed to initialize pslib.\n");
+		exit(EXIT_FAILURE);
+	}
 	ret = mtcp_init();
 	if (ret) {
 		TRACE_ERROR("Failed to initialize mtcp.\n");

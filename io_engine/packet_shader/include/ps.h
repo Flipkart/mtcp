@@ -244,6 +244,7 @@ struct ps_handle {
 	void *priv;
 };
 
+int ps_init(void);
 int ps_list_devices(struct ps_device *devices);
 int ps_init_handle(struct ps_handle *handle);
 void ps_close_handle(struct ps_handle *handle);

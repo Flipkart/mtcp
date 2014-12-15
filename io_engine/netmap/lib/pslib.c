@@ -26,6 +26,7 @@
 #define NETMAP_MAX_QUEUES_PER_DEVICE	64
 
 struct netmap_priv_device {
+	char name[IFNAMSIZ];
 	pthread_spinlock_t host_lock;
 	struct nm_desc *host_nmd;
 	struct nm_desc *nmd;
@@ -41,12 +42,13 @@ static char *nic_ifnames;
 static int ndevs_count;
 static struct netmap_priv_device ndevs[MAX_DEVICES];
 
-static int init_ndev(struct ps_device *devices, int ifindex, char *name)
+static int init_ndev(int ifindex, char *name)
 {
 	int i;
 	char ifn[IFNAMSIZ];
-	struct ps_device *dev = &devices[ifindex];
 	struct netmap_priv_device *ndev = &ndevs[ifindex];
+
+	strcpy(ndev->name, name);
 
 	pthread_spin_init(&ndev->host_lock, 0);
 	snprintf(ifn, sizeof(ifn), "netmap:%s^", name);
@@ -66,29 +68,20 @@ static int init_ndev(struct ps_device *devices, int ifindex, char *name)
 		return -1;
 	}
 
-	strcpy(dev->name, name);
-	dev->ifindex = ifindex;
-	dev->kifindex = ifindex;
-	dev->num_rx_queues = ndev->nmd->req.nr_rx_rings;
-	dev->num_tx_queues = ndev->nmd->req.nr_tx_rings;
-	ndev->dev = dev;
-
 	pthread_mutex_init(&ndev->queue_mutex, NULL);
-	ndev->queue_count = dev->num_rx_queues;
-	if (dev->num_tx_queues < ndev->queue_count)
-		ndev->queue_count = dev->num_tx_queues;
+	ndev->queue_count = ndev->nmd->req.nr_rx_rings;
+	if (ndev->nmd->req.nr_tx_rings < ndev->queue_count)
+		ndev->queue_count = ndev->nmd->req.nr_tx_rings;
 	if (NETMAP_MAX_QUEUES_PER_DEVICE < ndev->queue_count)
 		ndev->queue_count = NETMAP_MAX_QUEUES_PER_DEVICE;
 
 	for (i = 0; i < ndev->queue_count; i++)
 		ndev->queue_avail[i] = 1;
 
-	dev->num_rx_queues = dev->num_tx_queues = ndev->queue_count;
-
 	return 0;
 }
 
-int ps_list_devices(struct ps_device *devices)
+int ps_init(void)
 {
 	int i, j, ret;
 	char ifname[IFNAMSIZ];
@@ -120,7 +113,7 @@ int ps_list_devices(struct ps_device *devices)
 		}
 
 		if (j) {
-			ret = init_ndev(devices, ndevs_count, ifname);
+			ret = init_ndev(ndevs_count, ifname);
 			if (ret) {
 				TRACE_ERROR("%s: failed to init NIC %s "
 					    "in netmap mode\n", __func__, ifname);
@@ -135,7 +128,7 @@ int ps_list_devices(struct ps_device *devices)
 		i++;
 	}
 	if (j && (ndevs_count < MAX_DEVICES)) {
-		ret = init_ndev(devices, ndevs_count, ifname);
+		ret = init_ndev(ndevs_count, ifname);
 		if (ret) {
 			TRACE_ERROR("%s: failed to init NIC %s in netmap mode\n",
 				    __func__, ifname);
@@ -143,6 +136,24 @@ int ps_list_devices(struct ps_device *devices)
 			return ret;
 		}
 		ndevs_count++;
+	}
+
+	return 0;
+}
+
+int ps_list_devices(struct ps_device *devices)
+{
+	int ifindex;
+	struct ps_device *dev;
+	struct netmap_priv_device *ndev;
+
+	for (ifindex = 0; ifindex < ndevs_count; ifindex++) {
+		ndev = &ndevs[ifindex];
+		dev = &devices[ifindex];
+		strcpy(dev->name, ndev->name);
+		dev->ifindex = ifindex;
+		dev->kifindex = ifindex;
+		dev->num_rx_queues = dev->num_tx_queues = ndev->queue_count;
 	}
 
 	return ndevs_count;

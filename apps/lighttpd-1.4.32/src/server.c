@@ -1582,6 +1582,11 @@ main(int argc, char **argv) {
 	init_server_states(&srv_states, cpus, srv, conf_file);
 
 #ifdef USE_MTCP
+	/* initialize the pslib context */
+	if (ps_init()) {
+		fprintf(stderr, "Failed to initialize pslib\n");
+		goto clean_up;
+	}
 	/* initialize the mtcp context */
 	if (mtcp_init()) {
 		fprintf(stderr, "Failed to initialize mtcp\n");

@@ -17,6 +17,12 @@
 
 #include "../include/ps.h"
 
+int ps_init(void)
+{
+	/* Nothing to do here. */
+	return 0;
+}
+
 int ps_list_devices(struct ps_device *devices)
 {
 	struct ps_handle handle;

@@ -623,6 +623,12 @@ main(int argc, char **argv)
 
 	finished = 0;
 
+	/* initialize pslib */
+	ret = ps_init();
+	if (ret) {
+		TRACE_ERROR("Failed to initialize pslib\n");
+		exit(EXIT_FAILURE);
+	}
 	/* initialize mtcp */
 	ret = mtcp_init();
 	if (ret) {

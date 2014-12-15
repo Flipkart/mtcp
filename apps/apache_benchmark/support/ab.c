@@ -1969,6 +1969,7 @@ static void test(void)
     apr_size_t inbytes_left, outbytes_left;
 #endif
 #ifdef HAVE_MTCP
+    ps_init();
     mtcp_init();
 #endif
     if (!use_html) {
