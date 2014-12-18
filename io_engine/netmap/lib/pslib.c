@@ -33,24 +33,28 @@ struct netmap_priv_device {
 
 	struct ps_device *dev;
 
-	pthread_mutex_t queue_mutex;
+	pthread_spinlock_t queue_lock;
 	int queue_count;
 	int queue_avail[NETMAP_MAX_QUEUES_PER_DEVICE];
 };
 
-static char *nic_ifnames;
-static int ndevs_count;
-static struct netmap_priv_device ndevs[MAX_DEVICES];
+struct netmap_shmem_control {
+	char *nic_ifnames;
+	int ndevs_count;
+	struct netmap_priv_device ndevs[MAX_DEVICES];
+};
+
+static struct netmap_shmem_control *ctrl;
 
 static int init_ndev(int ifindex, char *name)
 {
 	int i;
 	char ifn[IFNAMSIZ];
-	struct netmap_priv_device *ndev = &ndevs[ifindex];
+	struct netmap_priv_device *ndev = &ctrl->ndevs[ifindex];
 
 	strcpy(ndev->name, name);
 
-	pthread_spin_init(&ndev->host_lock, 0);
+	pthread_spin_init(&ndev->host_lock, PTHREAD_PROCESS_SHARED);
 	snprintf(ifn, sizeof(ifn), "netmap:%s^", name);
 	ndev->host_nmd = nm_open(ifn, NULL, 0, NULL);
 	if (!ndev->host_nmd) {
@@ -68,7 +72,7 @@ static int init_ndev(int ifindex, char *name)
 		return -1;
 	}
 
-	pthread_mutex_init(&ndev->queue_mutex, NULL);
+	pthread_spin_init(&ndev->queue_lock, PTHREAD_PROCESS_SHARED);
 	ndev->queue_count = ndev->nmd->req.nr_rx_rings;
 	if (ndev->nmd->req.nr_tx_rings < ndev->queue_count)
 		ndev->queue_count = ndev->nmd->req.nr_tx_rings;
@@ -87,25 +91,29 @@ int ps_init(void)
 	char ifname[IFNAMSIZ];
 	char env[] = "MTCP_NETMAP_NIC_NAMES";
 
-	nic_ifnames = getenv(env);
-	if (!nic_ifnames) {
+	ctrl = (struct netmap_shmem_control *)mmap(NULL, sizeof(*ctrl), 
+		PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+	if (!ctrl) {
+		TRACE_ERROR("%s: failed allocate control shared memory\n",
+			    __func__);
+		assert(0);
+	}
+	memset(ctrl, 0, sizeof(*ctrl));
+
+	ctrl->nic_ifnames = getenv(env);
+	if (!ctrl->nic_ifnames) {
 		TRACE_ERROR("%s: failed to get environment variable %s\n",
 			    __func__, env);
 		assert(0);
-		return -1;
 	}
-
-	memset(ifname, 0, sizeof(ifname));
-
-	ndevs_count = 0;
-	memset(ndevs, 0, sizeof(ndevs));
 
 	i = 0;
 	j = 0;
-	while (nic_ifnames[i] && (ndevs_count < MAX_DEVICES)) {
-		if (nic_ifnames[i] != ' ') {
+	memset(ifname, 0, sizeof(ifname));
+	while (ctrl->nic_ifnames[i] && (ctrl->ndevs_count < MAX_DEVICES)) {
+		if (ctrl->nic_ifnames[i] != ' ') {
 			if (j < (IFNAMSIZ - 8)) {
-				ifname[j] = nic_ifnames[i];
+				ifname[j] = ctrl->nic_ifnames[i];
 				j++;
 			}
 			i++;
@@ -113,29 +121,27 @@ int ps_init(void)
 		}
 
 		if (j) {
-			ret = init_ndev(ndevs_count, ifname);
+			ret = init_ndev(ctrl->ndevs_count, ifname);
 			if (ret) {
-				TRACE_ERROR("%s: failed to init NIC %s "
-					    "in netmap mode\n", __func__, ifname);
+				TRACE_ERROR("%s: failed to init netmap NIC %s "
+					"(error %d)\n", __func__, ifname, ret);
 				assert(0);
-				return ret;
 			}
-			ndevs_count++;
+			ctrl->ndevs_count++;
 		}
 
 		memset(ifname, 0, sizeof(ifname));
 		j = 0;
 		i++;
 	}
-	if (j && (ndevs_count < MAX_DEVICES)) {
-		ret = init_ndev(ndevs_count, ifname);
+	if (j && (ctrl->ndevs_count < MAX_DEVICES)) {
+		ret = init_ndev(ctrl->ndevs_count, ifname);
 		if (ret) {
-			TRACE_ERROR("%s: failed to init NIC %s in netmap mode\n",
-				    __func__, ifname);
+			TRACE_ERROR("%s: failed to init netmap NIC %s "
+				    "(error %d)\n", __func__, ifname, ret);
 			assert(0);
-			return ret;
 		}
-		ndevs_count++;
+		ctrl->ndevs_count++;
 	}
 
 	return 0;
@@ -147,8 +153,8 @@ int ps_list_devices(struct ps_device *devices)
 	struct ps_device *dev;
 	struct netmap_priv_device *ndev;
 
-	for (ifindex = 0; ifindex < ndevs_count; ifindex++) {
-		ndev = &ndevs[ifindex];
+	for (ifindex = 0; ifindex < ctrl->ndevs_count; ifindex++) {
+		ndev = &ctrl->ndevs[ifindex];
 		dev = &devices[ifindex];
 		strcpy(dev->name, ndev->name);
 		dev->ifindex = ifindex;
@@ -156,7 +162,7 @@ int ps_list_devices(struct ps_device *devices)
 		dev->num_rx_queues = dev->num_tx_queues = ndev->queue_count;
 	}
 
-	return ndevs_count;
+	return ctrl->ndevs_count;
 }
 
 int ps_init_handle(struct ps_handle *handle)
@@ -186,9 +192,9 @@ void ps_close_handle(struct ps_handle *handle)
 int ps_alloc_qidx(struct ps_device *device, int cpu)
 {
 	int i, ret = -1;
-	struct netmap_priv_device *ndev = &ndevs[device->ifindex];
+	struct netmap_priv_device *ndev = &ctrl->ndevs[device->ifindex];
 
-	pthread_mutex_lock(&ndev->queue_mutex);
+	pthread_spin_lock(&ndev->queue_lock);
 
 	for (i = 0; i < ndev->queue_count; i++) {
 		if (ndev->queue_avail[i]) {
@@ -198,7 +204,7 @@ int ps_alloc_qidx(struct ps_device *device, int cpu)
 		}
 	}
 
-	pthread_mutex_unlock(&ndev->queue_mutex);
+	pthread_spin_unlock(&ndev->queue_lock);
 
 	if (ret == -1) {
 		TRACE_ERROR("%s: failed for device %s and cpu%d\n",
@@ -211,14 +217,14 @@ int ps_alloc_qidx(struct ps_device *device, int cpu)
 
 void ps_free_qidx(struct ps_device *device, int cpu, int qidx)
 {
-	struct netmap_priv_device *ndev = &ndevs[device->ifindex];
+	struct netmap_priv_device *ndev = &ctrl->ndevs[device->ifindex];
 
 	if ((0 <= qidx) && (qidx < NETMAP_MAX_QUEUES_PER_DEVICE)) {
-		pthread_mutex_lock(&ndev->queue_mutex);
+		pthread_spin_lock(&ndev->queue_lock);
 
 		ndev->queue_avail[qidx] = 1;
 
-		pthread_mutex_unlock(&ndev->queue_mutex);
+		pthread_spin_unlock(&ndev->queue_lock);
 	}
 }
 
@@ -294,7 +300,7 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	}
 
 	/* Find netmap private device and netmap ring */
-	ndev = &ndevs[ifindex];
+	ndev = &ctrl->ndevs[ifindex];
 	txring = NETMAP_TXRING(ndev->nmd->nifp, queue->qidx);
 
 	/* Find current netmap slot in NIC Tx ring */
@@ -338,7 +344,7 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	}
 
 	/* Find netmap private device and netmap ring */
-	ndev = &ndevs[ifindex];
+	ndev = &ctrl->ndevs[ifindex];
 	txring = NETMAP_TXRING(ndev->host_nmd->nifp,
 					ndev->host_nmd->last_tx_ring);
 
@@ -391,7 +397,7 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 
 	/* Setup poll structure */
 	for (i = 0; i < handle->queue_count*2; i+=2) {
-		ndev = &ndevs[handle->queues[i].ifindex];
+		ndev = &ctrl->ndevs[handle->queues[i].ifindex];
 		pfds[i].fd = ndev->nmd->fd;
 		pfds[i].events = POLLIN;
 		pfds[i].revents = 0;
@@ -409,7 +415,7 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	count = handle->queue_count;
 	while (count && !recv) {
 		queue = &handle->queues[i];
-		ndev = &ndevs[queue->ifindex];
+		ndev = &ctrl->ndevs[queue->ifindex];
 
 		/* Check for poll error */
 		if (pfds[2*i].revents & POLLERR) {
