@@ -41,6 +41,7 @@ struct netmap_priv_device {
 struct netmap_shmem_control {
 	char *nic_ifnames;
 	int ndevs_count;
+	int poll_msecs;
 	struct netmap_priv_device ndevs[MAX_DEVICES];
 };
 
@@ -89,7 +90,9 @@ int ps_init(void)
 {
 	int i, j, ret;
 	char ifname[IFNAMSIZ];
-	char env[] = "MTCP_NETMAP_NIC_NAMES";
+	char *env;
+	char nic_names_env[] = "MTCP_NETMAP_NIC_NAMES";
+	char poll_msecs_env[] = "MTCP_NETMAP_POLL_MSECS";
 
 	ctrl = (struct netmap_shmem_control *)mmap(NULL, sizeof(*ctrl), 
 		PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
@@ -100,12 +103,16 @@ int ps_init(void)
 	}
 	memset(ctrl, 0, sizeof(*ctrl));
 
-	ctrl->nic_ifnames = getenv(env);
-	if (!ctrl->nic_ifnames) {
+	env = getenv(nic_names_env);
+	if (!env) {
 		TRACE_ERROR("%s: failed to get environment variable %s\n",
-			    __func__, env);
+			    __func__, nic_names_env);
 		assert(0);
 	}
+	ctrl->nic_ifnames = env;
+
+	env = getenv(poll_msecs_env);
+	ctrl->poll_msecs = (env) ? atoi(env) : 0;
 
 	i = 0;
 	j = 0;
@@ -407,7 +414,7 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	}
 
 	/* Wait for incoming packets with No timeout */
-	poll(pfds, handle->queue_count*2, handle->queue_count*500);
+	poll(pfds, handle->queue_count*2, ctrl->poll_msecs);
 
 	/* Check each device for Rx packets starting from handle->rx_device */
 	recv = 0;
