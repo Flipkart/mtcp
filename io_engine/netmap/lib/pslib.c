@@ -23,6 +23,14 @@
 #define TRACE_ERROR(msg...)	fprintf(stderr, msg)
 #define TRACE_INFO(msg...)	fprintf(stderr, msg)
 
+#undef _PS_DEBUG
+
+#ifdef _PS_DEBUG
+#define TRACE_DEBUG(msg...)	fprintf(stderr, msg)
+#else
+#define TRACE_DEBUG(msg...)
+#endif
+
 #define NETMAP_MAX_QUEUES_PER_DEVICE	64
 
 struct netmap_priv_device {
@@ -228,6 +236,10 @@ done:
 		assert(0);
 	}
 
+	/* Print debug info */
+	TRACE_DEBUG("%s: ifindex=%d cpu=%d qidx=%d sched_cpu=%d\n",
+		    __func__, device->ifindex, cpu, ret, sched_getcpu());
+
 	return ret;
 }
 
@@ -326,6 +338,24 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 	while (nm_ring_space(txring) && (send < chunk->cnt)) {
 		struct netmap_slot *slot = &txring->slot[cur];
 
+		/* Check buf_idx of Tx packet */
+		while ((slot->buf_idx < 2) || (slot->len == 0)) {
+			TRACE_ERROR("%s: Invalid Tx buffer index "
+				    "ifindex=%d qidx=%d "
+				    "cur=%d len=%d buf_idx=%d\n",
+				    __func__, queue->ifindex,
+				    queue->qidx, cur, slot->len, slot->buf_idx);
+			sleep(2);
+		}
+
+		/* Print debug info */
+		TRACE_DEBUG("%s: tx packet "
+			    "ifindex=%d qidx=%d "
+			    "cur=%d len=%d buf_idx=%d\n",
+			    __func__,
+			    queue->ifindex, queue->qidx,
+			    cur, slot->len, slot->buf_idx);
+
 		/* Update current netmap slot */
 		nm_pkt_copy(chunk->buf + chunk->info[send].offset,
 			    NETMAP_BUF(txring, slot->buf_idx),
@@ -376,6 +406,13 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 	/* Find current netmap slot */
 	cur = txring->cur;
 	slot = &txring->slot[cur];
+
+	/* Print debug info */
+	TRACE_DEBUG("%s: host-tx packet "
+		    "ifindex=%d "
+		    "cur=%d len=%d buf_idx=%d\n",
+		    __func__,
+		    ifindex, cur, slot->len, slot->buf_idx);
 
 	/* Update current netmap slot */
 	nm_pkt_copy(packet->buf,
@@ -452,6 +489,24 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 				(recv < chunk->cnt)) {
 				struct netmap_slot *slot = &rxring->slot[cur];
 
+				/* Check buf_idx of Rx packet */
+				while ((slot->buf_idx < 2) || (slot->len == 0)) {
+					TRACE_ERROR("%s: Invalid Rx buffer index "
+						    "ifindex=%d qidx=%d "
+						    "cur=%d len=%d buf_idx=%d\n",
+						    __func__, queue->ifindex,
+						    queue->qidx, cur, slot->len, slot->buf_idx);
+					sleep(2);
+				}
+
+				/* Print debug info */
+				TRACE_DEBUG("%s: rx packet "
+					    "ifindex=%d qidx=%d "
+					    "cur=%d len=%d buf_idx=%d\n",
+					    __func__,
+					    queue->ifindex, queue->qidx,
+					    cur, slot->len, slot->buf_idx);
+
 				/* Forward single Rx packet to mTCP */
 				if (recv) {
 					chunk->info[recv].offset =
@@ -503,9 +558,35 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 				struct netmap_slot *host_slot =
 						&host_rxring->slot[host_cur];
 				struct netmap_slot *slot = &txring->slot[cur];
-				uint32_t buf_idx = host_slot->buf_idx;
+				uint32_t buf_idx;
+
+				/* Check host rx and tx slots */
+				while ((slot->buf_idx < 2) ||
+				       (slot->len == 0) ||
+				       (host_slot->buf_idx < 2) ||
+				       (host_slot->len == 0)) {
+					TRACE_ERROR("%s: Invalid Rx buffer index "
+						    "ifindex=%d qidx=%d "
+						    "host_cur=%d host_len=%d host_buf_idx=%d "
+						    "cur=%d len=%d buf_idx=%d\n",
+						    __func__,
+						    queue->ifindex, queue->qidx,
+						    host_cur, host_slot->len, host_slot->buf_idx,
+						    cur, slot->len, slot->buf_idx);
+					sleep(2);
+				}
+
+				TRACE_DEBUG("%s: host-rx-to-tx packet "
+					    "ifindex=%d qidx=%d "
+					    "host_cur=%d host_len=%d host_buf_idx=%d "
+					    "cur=%d len=%d buf_idx=%d\n",
+					    __func__,
+					    queue->ifindex, queue->qidx,
+					    host_cur, host_slot->len, host_slot->buf_idx,
+					    cur, slot->len, slot->buf_idx);
 
 				/* Zero-copy */
+				buf_idx = host_slot->buf_idx;
 				host_slot->buf_idx = slot->buf_idx;
 				slot->buf_idx = buf_idx;
 				host_slot->flags |= NS_BUF_CHANGED;
