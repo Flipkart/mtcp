@@ -1251,7 +1251,7 @@ main(int argc, char **argv) {
 #endif
 #ifdef MULTI_THREADED
 	/* create the cpu variable to facilitate multi-threading framework */
-	size_t cpus = -1;
+	size_t cpus = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
 
 
