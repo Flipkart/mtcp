@@ -494,7 +494,7 @@ core_affinitize(int cpu)
 {
 	cpu_set_t *cmask;
 	struct bitmask *bmask;
-	size_t n;
+	size_t n, sz;
 	int ret;
 
 	n = sysconf(_SC_NPROCESSORS_ONLN);
@@ -508,8 +508,10 @@ core_affinitize(int cpu)
 	if (cmask == NULL)
 		return -1;
 
-	CPU_ZERO_S(n, cmask);
-	CPU_SET_S(cpu, n, cmask);
+	sz = CPU_ALLOC_SIZE(n);
+
+	CPU_ZERO_S(sz, cmask);
+	CPU_SET_S(cpu, sz, cmask);
 
 	ret = sched_setaffinity(0, n, cmask);
 
