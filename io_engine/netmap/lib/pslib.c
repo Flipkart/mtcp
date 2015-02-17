@@ -23,6 +23,7 @@
 #define TRACE_ERROR(msg...)	fprintf(stderr, msg)
 #define TRACE_INFO(msg...)	fprintf(stderr, msg)
 
+#define _USE_NM_PKT_COPY
 #undef _PS_DEBUG
 
 #ifdef _PS_DEBUG
@@ -102,7 +103,7 @@ int ps_init(void)
 	char nic_names_env[] = "MTCP_NETMAP_NIC_NAMES";
 	char poll_msecs_env[] = "MTCP_NETMAP_POLL_MSECS";
 
-	ctrl = (struct netmap_shmem_control *)mmap(NULL, sizeof(*ctrl), 
+	ctrl = (struct netmap_shmem_control *)mmap(NULL, sizeof(*ctrl),
 		PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 	if (!ctrl) {
 		TRACE_ERROR("%s: failed allocate control shared memory\n",
@@ -357,9 +358,15 @@ int ps_send_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 			    cur, slot->len, slot->buf_idx);
 
 		/* Update current netmap slot */
+#ifdef _USE_NM_PKT_COPY
 		nm_pkt_copy(chunk->buf + chunk->info[send].offset,
 			    NETMAP_BUF(txring, slot->buf_idx),
 			    chunk->info[send].len);
+#else
+		memcpy(NETMAP_BUF(txring, slot->buf_idx),
+			chunk->buf + chunk->info[send].offset,
+			chunk->info[send].len);
+#endif
 		slot->flags = 0;
 		slot->len = chunk->info[send].len;
 		send++;
@@ -415,9 +422,15 @@ int ps_slowpath_packet(struct ps_handle *handle, struct ps_packet *packet)
 		    ifindex, cur, slot->len, slot->buf_idx);
 
 	/* Update current netmap slot */
+#ifdef _USE_NM_PKT_COPY
 	nm_pkt_copy(packet->buf,
 		    NETMAP_BUF(txring, slot->buf_idx),
 		    packet->len);
+#else
+	memcpy(NETMAP_BUF(txring, slot->buf_idx),
+		packet->buf,
+		packet->len);
+#endif
 	slot->flags = 0;
 	slot->len = packet->len;
 	ret = 1;
@@ -516,9 +529,15 @@ int ps_recv_chunk(struct ps_handle *handle, struct ps_chunk *chunk)
 					chunk->info[recv].offset = 0;
 				}
 				chunk->info[recv].len = slot->len;
+#ifdef _USE_NM_PKT_COPY
 				nm_pkt_copy(NETMAP_BUF(rxring, slot->buf_idx),
 					chunk->buf + chunk->info[recv].offset,
 					chunk->info[recv].len);
+#else
+				memcpy(chunk->buf + chunk->info[recv].offset,
+					NETMAP_BUF(rxring, slot->buf_idx),
+					chunk->info[recv].len);
+#endif
 				recv++;
 
 				/* Point to next netmap slot */
