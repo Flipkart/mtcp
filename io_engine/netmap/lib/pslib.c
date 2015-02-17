@@ -203,6 +203,14 @@ int ps_alloc_qidx(struct ps_device *device, int cpu)
 
 	pthread_spin_lock(&ndev->queue_lock);
 
+	if (cpu < ndev->queue_count) {
+		if (ndev->queue_avail[cpu]) {
+			ret = cpu;
+			ndev->queue_avail[cpu] = 0;
+			goto done;
+		}
+	}
+
 	for (i = 0; i < ndev->queue_count; i++) {
 		if (ndev->queue_avail[i]) {
 			ret = i;
@@ -211,6 +219,7 @@ int ps_alloc_qidx(struct ps_device *device, int cpu)
 		}
 	}
 
+done:
 	pthread_spin_unlock(&ndev->queue_lock);
 
 	if (ret == -1) {
